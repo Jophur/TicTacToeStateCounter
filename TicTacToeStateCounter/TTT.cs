@@ -34,7 +34,7 @@ namespace TicTacToeReflector
         private const char X = 'x';
         private const char O = 'o';
         private const char Empty = '.';
-        private static string newBoard = new(Empty, 9);
+        private static readonly string newBoard = new(Empty, 9);
         private readonly Dictionary<string, string> AllBoards = new();
 
         #region Static Methods
@@ -130,16 +130,46 @@ namespace TicTacToeReflector
             return sb.ToString();
         }
         #endregion Static Methods
+        
+        /// <summary>
+        /// Returns a list of all possible states
+        /// </summary>
+        /// <param name="ignoreSymmetry">If true, then states which are symmetrical will not be included</param>
+        /// <returns></returns>
+        public IEnumerable<string> UniqueStates(bool ignoreSymmetry)
+        {
+            UniqueEndStates(ignoreSymmetry);
+            List<string> result = new();
+            Regex regex = new Regex("transform");
+            foreach (var key in AllBoards.Keys)
+            {
+                if (!regex.IsMatch(AllBoards[key]))
+                {
+                    result.Add(key);
+                }
+            }
+            return result;
+        }
+        
+        /// <summary>
+        /// Same as UniqueEndStates(true); I just didn't want to refactor my code
+        /// </summary>
+        /// <returns></returns>
         public IEnumerable<string> UniqueEndStates()
         {
+            return UniqueEndStates(true);
+        }
+        public IEnumerable<string> UniqueEndStates(bool ignoreSymmetry)
+        {
+            AllBoards.Clear();
             List<string> result = new List<string>();
             string board = TTT.NewBoard;
             AddBoard(board, "New Game");
-            result.AddRange(UniqueEndStates(board));
+            result.AddRange(UniqueEndStates(board, ignoreSymmetry));
 
             return result;
         }
-        private IList<string> UniqueEndStates(string board)
+        private IList<string> UniqueEndStates(string board, bool ignoreSymmetry)
         {   //xoxoxoxxo
             List<string> result = new List<string>();
             var moves = TTT.Moves(board);
@@ -164,10 +194,11 @@ namespace TicTacToeReflector
                         note = "player move";
                     }
                     AddBoard(move, note);   // add this move to the list of states we've seen
-                    AddTransforms(move);   // add all transforms to the list of states we've seen
+                    if(ignoreSymmetry)
+                        AddTransforms(move);   // add all transforms to the list of states we've seen
                     if (winner == Winner.None)
                     {
-                        result.AddRange(UniqueEndStates(move));
+                        result.AddRange(UniqueEndStates(move, ignoreSymmetry));
                     }
                 }
             }
@@ -175,17 +206,17 @@ namespace TicTacToeReflector
         }
         private void AddTransforms(string board)
         {
-            AddBoard(TTT.MirrorImage(board), " reflection of " + board);
+            AddBoard(TTT.MirrorImage(board), "transform: reflection of " + board);
 
             string r1 = TTT.Rotate(board);
-            AddBoard(r1, "rotation of " + board);
+            AddBoard(r1, "transform: rotation of " + board);
             string r2 = TTT.Rotate(r1);
-            AddBoard(r2, "rotation of " + r1);
+            AddBoard(r2, "transform: rotation of " + r1);
             string r3 = TTT.Rotate(r2);
-            AddBoard(r3, "rotation of " + r2);
-            AddBoard(TTT.MirrorImage(r1), " reflection of " + r1);
-            AddBoard(TTT.MirrorImage(r2), " reflection of " + r2);
-            AddBoard(TTT.MirrorImage(r3), " reflection of " + r3);
+            AddBoard(r3, "transform: rotation of " + r2);
+            AddBoard(TTT.MirrorImage(r1), "transform: reflection of " + r1);
+            AddBoard(TTT.MirrorImage(r2), "transform: reflection of " + r2);
+            AddBoard(TTT.MirrorImage(r3), "transform: reflection of " + r3);
         }
         private void AddBoard(string board, string note)
         {
