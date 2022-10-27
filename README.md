@@ -37,20 +37,20 @@ The transformations are:
 
 ## Algorithm
 Start with a new game and traverse the decision tree
-1. Start with a new game, add it to a queue
-2. While there are nodes in the queue
-    a. Remove a node from the queue
-    b. If the node is not in the list of visited nodes,
-        i. Add it to the list
-        ii. Add all of its symmetrical transforms to the list
-        iii. If the node is not an end state,
-            1. Add each possible next move to the queue
+* Start with a new game, add it to a queue
+* While there are nodes in the queue
+    * Remove a node from the queue
+    * If the node is not in the list of visited nodes,
+        * Add it to the list
+        * Add all of its symmetrical transforms to the list
+        * If the node is not an end state,
+            * Add each possible next move to the queue
 
 ## Musings
 I originally wrote a recursive algorithm that took a boolean parameter that specified whether or
 not to ingore symmetry.
 
-When the flag was false, I did not add the transforms (step 2.b.ii.) and instead would traverse
+When the flag was false, I did not add the transforms to the list of visited nodes and thus instead would traverse
 the tree from every single node.
 
 This took a long time and used a lot of memory. So I decided to rewrite my code using iteration.
@@ -80,8 +80,8 @@ in the list.
 ## Results
 Here's the results, using the terminology and table layout the original poster used.
 
-| Ply | Unique(1) | NoSymmetries(1) | Unique(2) | NoSymmetries(2) | Unique(3) | NoSymmetries(3) | Unique(4) | NoSymmetries(4) |
-| - | - | - | - | - | - | - | - |  |
+| Ply | Unique(1) | NoSym(1) | Unique(2) | NoSym(2) | Unique(3) | NoSym(3) | Unique(4) | NoSym(4) |
+| - | - | - | - | - | - | - | - | - |
 | 0 | 1 | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
 | 1 | 1 | 1 | 4 | 1 | 9 | 3 | 16 | 3 |
 | 2 | 2 | 2 | 12 | 2 | 72 | 12 | 240 | 33 |
