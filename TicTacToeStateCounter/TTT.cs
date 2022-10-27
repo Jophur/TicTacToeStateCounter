@@ -10,32 +10,6 @@ namespace TicTacToeStateCounter
     /// </summary>
     public class TTT
     {
-        // How this works
-        // My son asked me last night: How many different Tic Tac Toe boards are there?
-        //  What if you remove all the reflections and rotations that are basically the same?
-        //  For example if you take the mirror image of a board, it's basically the same board
-        //  even though it's technically different
-
-        // We found 7 transformations that are functionally equivalent.
-        // For example: 
-        //  x|o|x   is functionally equivalent to:  x| |o
-        //   | |    in terms of decision making     o| | 
-        //  x| |o                                   x| |x
-        // The transformations are:
-        //  Rotate (counter clockwise) once
-        //  Rotate twice
-        //  Rotate three times
-        //  Flip on vertical axis (MirrorImage in my code)
-        //      and flip each of the 3 rotations on the vertical axis
-
-        // So how I do this is I start with a new game (root), and add it to a queue
-        //  For each node in the queue
-        //    If the node is not in my list of visited nodes,
-        //      Add it to a list of visited nodes
-        //      Add all of it's transformations to the list of visited nodes
-        //      If the node is not an end state,
-        //        I add all possible child nodes to the queue
-
         public enum Status { Unfinished, X_Won, O_Won, Tie }
         public struct Metadata
         {
