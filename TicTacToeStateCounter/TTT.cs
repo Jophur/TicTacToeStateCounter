@@ -1,9 +1,14 @@
 ﻿using System.Text;
 using System.Text.RegularExpressions;
+using System.Diagnostics;
 
-namespace TicTacToeReflector
+namespace TicTacToeStateCounter
 {
-    internal class TTT
+    /// <summary>
+    /// Calculates all possible Tic Tac Toe Stats for games of length n x n
+    /// NOT Threadsafe!
+    /// </summary>
+    public class TTT
     {
         // How this works
         // My son asked me last night: How many different Tic Tac Toe boards are there?
@@ -23,53 +28,56 @@ namespace TicTacToeReflector
         //  Flip on vertical axis (MirrorImage in my code)
         //      and flip each of the 3 rotations on the vertical axis
 
-        // So how I do this is I start with a new game (root), and visit all possible moves (nodes)
-        //  When I find a node that I haven't seen before, I add it to a list of visited nodes
-        //  Then I add all the transformations to the list of visited nodes
-        //  When I find an end-state, either because someone won or because there are no more moves,
-        //      I add it to the result collection
-        //      If it is an end-state because someone won, I stop visiting child nodes
+        // So how I do this is I start with a new game (root), and add it to a queue
+        //  For each node in the queue
+        //    If the node is not in my list of visited nodes,
+        //      Add it to a list of visited nodes
+        //      Add all of it's transformations to the list of visited nodes
+        //      If the node is not an end state,
+        //        I add all possible child nodes to the queue
 
-        public enum Winner { None, X, O }
+        public enum Status { Unfinished, X_Won, O_Won, Tie }
+        public struct Metadata
+        {
+            public Metadata(Status status, bool transform, int ply)
+            {
+                Status = status;
+                Transform = transform;
+                Ply = ply;
+            }
+            public Status Status { get; }
+            public bool Transform { get; }
+            public int Ply { get; }
+        }
+        private enum Note { New, Move, Win, Transform}
         private const char X = 'x';
         private const char O = 'o';
         private const char Empty = '.';
-        private static readonly string newBoard = new(Empty, 9);
-        private readonly Dictionary<string, string> AllBoards = new();
+        private readonly string newBoard;
+        private readonly int N;
+        private readonly Dictionary<string, Metadata> AllBoards = new();
+
+
+        #region Constructor
+        /// <summary>
+        /// Instantiates a new state calculator of Tic Tac Toe boards of size nxn
+        /// </summary>
+        /// <param name="n"></param>
+        public TTT(int n)
+        {
+            this.newBoard =  new(Empty, n * n);
+            this.N = n;
+        }
+        #endregion
 
         #region Static Methods
-        public static string NewBoard { get => newBoard; }
-
-        public static void WriteBoard(string board, TextWriter writer)
-        {
-            writer.Write(board[0]);
-            writer.Write("|");
-            writer.Write(board[1]);
-            writer.Write("|");
-            writer.Write(board[2]);
-            writer.Write("\n");
-            writer.Write("—––—–\n");
-            writer.Write(board[3]);
-            writer.Write("|");
-            writer.Write(board[4]);
-            writer.Write("|");
-            writer.Write(board[5]);
-            writer.Write("\n");
-            writer.Write("—––—–\n");
-            writer.Write(board[6]);
-            writer.Write("|");
-            writer.Write(board[7]);
-            writer.Write("|");
-            writer.Write(board[8]);
-            writer.Write("\n");
-        }
         public static IEnumerable<string> Moves(string board)
         {
             // x or o's turn?
             int countx = Regex.Matches(board, X.ToString()).Count;
             int counto = Regex.Matches(board, O.ToString()).Count;
             char player = X;
-            // states:
+            // possible states:
             // #x = #o -> x
             // #o < #x -> o
             if (counto < countx) player = O;
@@ -91,46 +99,175 @@ namespace TicTacToeReflector
             }
             return result;
         }
-        public static Winner Score(string board)
-        {
-            char winner = Empty;
-            if (board[0] == board[1] && board[0] == board[2] && board[0] != Empty) winner = board[0];
-            else if (board[3] == board[4] && board[3] == board[5] && board[3] != Empty) winner = board[3];
-            else if (board[6] == board[7] && board[6] == board[8] && board[6] != Empty) winner = board[6];
-            else if (board[0] == board[3] && board[0] == board[6] && board[0] != Empty) winner = board[0];
-            else if (board[1] == board[4] && board[1] == board[7] && board[1] != Empty) winner = board[1];
-            else if (board[2] == board[5] && board[2] == board[8] && board[2] != Empty) winner = board[2];
-            else if (board[0] == board[4] && board[0] == board[8] && board[0] != Empty) winner = board[0];
-            else if (board[2] == board[4] && board[2] == board[6] && board[2] != Empty) winner = board[2];
 
-            Winner result = winner switch
+        public static void WriteBoard(TTT ttt, string board, TextWriter writer)
+        {
+            Debug.Assert(board != null);
+            Debug.Assert(board.Length == ttt.N * ttt.N);
+            string spaced = board.Replace(Empty, ' ');
+            // TODO: make this work for any N
+            for (int row = 0; row < ttt.N; ++row)
             {
-                Empty => Winner.None,
-                O => Winner.O,
-                X => Winner.X,
-                _ => throw new Exception("Unexpected input"),
-            };
-            return result;
-        }
-        public static string MirrorImage(string input)
-        {
-            StringBuilder sb = new();
-            sb = sb.Append(input[2]).Append(input[1]).Append(input[0])
-                .Append(input[5]).Append(input[4]).Append(input[3])
-                .Append(input[8]).Append(input[7]).Append(input[6]);
+                if(0 < row)
+                {
+                    writer.WriteLine(new string('—', 2 * ttt.N - 1));
+                }
 
+                for (int col = 0; col < ttt.N; ++col)
+                {
+                    if (0 < col)
+                        writer.Write('|');
+                    writer.Write(spaced[col]);
+                }
+                writer.WriteLine();
+            }
+        }
+        /// <summary>
+        /// returns the number of turns required to reach this state
+        /// </summary>
+        /// <param name="ttt"></param>
+        /// <param name="board"></param>
+        /// <returns></returns>
+        public static int Ply(TTT ttt, string board)
+        {
+            Debug.Assert(board != null);
+            Debug.Assert(board.Length == ttt.N * ttt.N);
+            // emtpy
+            int blanks = board.Count(f => f == Empty);
+
+            return ttt.N * ttt.N - blanks;
+        }
+        /// <summary>
+        /// Determine if there's a winner
+        /// </summary>
+        /// <param name="ttt"></param>
+        /// <param name="board"></param>
+        /// <returns>Winner.X, Winner.O, or Winner.None</returns>
+        /// <exception cref="Exception"></exception>
+        public static Status GetStatus(TTT ttt, string board)
+        {
+            Debug.Assert(board != null);
+            Debug.Assert(board.Length == ttt.N * ttt.N);
+            char streak = Empty;
+            // check each row
+            for (int row = 0; row < ttt.N; ++row)
+            {
+                int col = 0;
+                streak = board[row * ttt.N + col];
+                ++col;
+                while (col < ttt.N && streak != Empty)
+                {
+                    if (board[row * ttt.N + col] != streak)
+                        streak = Empty;
+                    ++col;
+                }
+                if (streak != Empty)
+                    break;
+            }
+            // check each column
+            if (streak == Empty)
+            {
+                for (int col = 0; col < ttt.N; ++col)
+                {
+                    int row = 0;
+                    streak = board[row * ttt.N + col];
+                    ++row;
+                    while (row < ttt.N && streak != Empty)
+                    {
+                        if (board[row * ttt.N + col] != streak)
+                            streak = Empty;
+                        ++row;
+                    }
+                    if (streak != Empty)
+                        break;
+                }
+            }
+            // check diagonal 1
+            if (streak == Empty)
+            {
+                int i = 0;
+                streak = board[i * ttt.N + i];
+                ++i;
+                while (i < ttt.N && streak != Empty)
+                {
+                    if (board[i * ttt.N + i] != streak)
+                        streak = Empty;
+                    ++i;
+                }
+            }
+            // check diagonal 2
+            if (streak == Empty)
+            {
+                int i = 0;
+                streak = board[i * ttt.N + (ttt.N - 1) - i];
+                ++i;
+                while (i < ttt.N && streak != Empty)
+                {
+                    if (board[i * ttt.N + (ttt.N - 1) - i] != streak)
+                        streak = Empty;
+                    ++i;
+                }
+            }
+            // If someone won, return the winner
+            if (streak != Empty) {
+                return streak switch
+                {
+                    O => Status.O_Won,
+                    X => Status.X_Won,
+                    _ => throw new Exception("Unexpected input"),
+
+                };
+            }
+            // If there are no empty spaces, the game is a tie
+            if (board.IndexOf(Empty) == -1)
+                return Status.Tie;
+
+            // Otherwise it is unfinished
+            return Status.Unfinished;
+        }
+        public static string MirrorImage(TTT ttt, string input)
+        {
+            Debug.Assert(input != null);
+            Debug.Assert(input.Length <= ttt.N * ttt.N);
+            StringBuilder sb = new();
+            for (int row = 0; row < ttt.N; ++row)
+            {
+                for (int col = ttt.N - 1; 0 <= col; --col)
+                {
+                    sb.Append(input[row * ttt.N + col]);
+                }
+            }
             return sb.ToString();
         }
-        public static string Rotate(string input)
+        public static string Rotate(TTT ttt, string input)
         {
+            Debug.Assert(input != null);
+            Debug.Assert(input.Length <= ttt.N * ttt.N);
             StringBuilder sb = new();
-            sb = sb.Append(input[2]).Append(input[5]).Append(input[8])
-                .Append(input[1]).Append(input[4]).Append(input[7])
-                .Append(input[0]).Append(input[3]).Append(input[6]);
+            for (int col = ttt.N - 1; 0 <= col; --col)
+            {
+                for (int row = 0; row < ttt.N; ++row)
+                {
+                    int index = row * ttt.N + col;
+                    char c = input[index];
+                    sb.Append(c);
+                }
+            }
             return sb.ToString();
         }
         #endregion Static Methods
+
+        #region Public methods
+        public IReadOnlyDictionary<string, Metadata> Data()
+        {
+            if (AllBoards.Count == 0)
+            {
+                CountStates();
+            }
+            return this.AllBoards;
+        }
         
+
         /// <summary>
         /// Returns a list of all possible states
         /// </summary>
@@ -138,14 +275,21 @@ namespace TicTacToeReflector
         /// <returns></returns>
         public IEnumerable<string> UniqueStates(bool ignoreSymmetry)
         {
-            UniqueEndStates(ignoreSymmetry);
             List<string> result = new();
-            Regex regex = new Regex("transform");
-            foreach (var key in AllBoards.Keys)
+            if (AllBoards.Count == 0)
             {
-                if (!regex.IsMatch(AllBoards[key]))
+                CountStates();
+            }
+            foreach (var kvp in AllBoards)
+            {
+                // Truth table for the symmetry inclusion:
+                // include?         true    true    true    false
+                // ignoreSymmetry   false   false   true    true
+                // Transform        false   true    false   true
+                // So !(ignoreSymmetry && Transform)
+                if (!(ignoreSymmetry && kvp.Value.Transform))
                 {
-                    result.Add(key);
+                    result.Add(kvp.Key);
                 }
             }
             return result;
@@ -159,71 +303,84 @@ namespace TicTacToeReflector
         {
             return UniqueEndStates(true);
         }
+        /// <summary>
+        /// Finds all unique end states. If ignoreSymmetry is true, then an x in the upper right corner is a duplicate of an x in the upper left corner
+        /// </summary>
+        /// <param name="ignoreSymmetry"></param>
+        /// <returns></returns>
         public IEnumerable<string> UniqueEndStates(bool ignoreSymmetry)
         {
-            AllBoards.Clear();
-            List<string> result = new List<string>();
-            string board = TTT.NewBoard;
-            AddBoard(board, "New Game");
-            result.AddRange(UniqueEndStates(board, ignoreSymmetry));
-
-            return result;
-        }
-        private IList<string> UniqueEndStates(string board, bool ignoreSymmetry)
-        {   //xoxoxoxxo
-            List<string> result = new List<string>();
-            var moves = TTT.Moves(board);
-            // Is this an end state?
-            if (moves.Count() == 0)
-                result.Add(board);
-            foreach (var move in moves)
+            List<string> result = new();
+            if (AllBoards.Count == 0)
             {
-                // only consider boards we haven't yet encountered
-                if (!AllBoards.ContainsKey(move))
+                CountStates();
+            }
+            foreach(var kvp in AllBoards)
+            {
+                // Truth table for the symmetry inclusion:
+                // include?         true    true    true    false
+                // ignoreSymmetry   false   false   true    true
+                // Transform        false   true    false   true
+                // So !(ignoreSymmetry && Transform)
+                if (kvp.Value.Status != Status.Unfinished
+                    && !(ignoreSymmetry && kvp.Value.Transform))
                 {
-                    string note = "";
-                    // is this a winning move?
-                    Winner winner = TTT.Score(move);
-                    if (winner != Winner.None)
-                    {
-                        note += winner.ToString() + " wins!";
-                        result.Add(move); // this is an end-state
-                    }
-                    else
-                    {
-                        note = "player move";
-                    }
-                    AddBoard(move, note);   // add this move to the list of states we've seen
-                    if(ignoreSymmetry)
-                        AddTransforms(move);   // add all transforms to the list of states we've seen
-                    if (winner == Winner.None)
-                    {
-                        result.AddRange(UniqueEndStates(move, ignoreSymmetry));
-                    }
+                    result.Add(kvp.Key);
                 }
             }
             return result;
         }
-        private void AddTransforms(string board)
+        #endregion Public
+        #region Private Methods
+        /// <summary>
+        /// Starts with a new game and counts all states;
+        /// </summary>
+        private void CountStates()
         {
-            AddBoard(TTT.MirrorImage(board), "transform: reflection of " + board);
-
-            string r1 = TTT.Rotate(board);
-            AddBoard(r1, "transform: rotation of " + board);
-            string r2 = TTT.Rotate(r1);
-            AddBoard(r2, "transform: rotation of " + r1);
-            string r3 = TTT.Rotate(r2);
-            AddBoard(r3, "transform: rotation of " + r2);
-            AddBoard(TTT.MirrorImage(r1), "transform: reflection of " + r1);
-            AddBoard(TTT.MirrorImage(r2), "transform: reflection of " + r2);
-            AddBoard(TTT.MirrorImage(r3), "transform: reflection of " + r3);
-        }
-        private void AddBoard(string board, string note)
-        {
-            if (!AllBoards.ContainsKey(board))
+            this.AllBoards.Clear();
+            Queue<string> queue = new Queue<string>();
+            string board = this.newBoard;
+            queue.Enqueue(board);
+            while(0 < queue.Count)
             {
-                AllBoards.Add(board, note);
+                board = queue.Dequeue();
+                if (!AllBoards.ContainsKey(board))
+                {
+                    Status status = GetStatus(this, board);
+                    int ply = TTT.Ply(this, board);
+                    // Add this board to the list
+                    AddBoard(board, new Metadata(status, false, ply));
+                    AddTransforms(board, status, ply);
+                    if(status == Status.Unfinished)
+                    {
+                        var moves = Moves(board);
+                        foreach(var move in moves)
+                            queue.Enqueue(move);
+                    }
+                }
             }
         }
+
+        private void AddTransforms(string board, Status status, int ply)
+        {
+            Metadata metadata = new Metadata(status, true, ply);
+            AddBoard(MirrorImage(this, board), metadata);
+
+            string r1 = Rotate(this, board);
+            AddBoard(r1, metadata);
+            string r2 = Rotate(this, r1);
+            AddBoard(r2, metadata);
+            string r3 = Rotate(this, r2);
+            AddBoard(r3, metadata);
+            AddBoard(MirrorImage(this, r1), metadata);
+            AddBoard(MirrorImage(this, r2), metadata);
+            AddBoard(MirrorImage(this, r3), metadata);
+        }
+        private void AddBoard(string board, Metadata metadata)
+        {
+            if (!AllBoards.ContainsKey(board))
+                AllBoards.Add(board, metadata);
+        }
+        #endregion Private Methods
     }
 }
